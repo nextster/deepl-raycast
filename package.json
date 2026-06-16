@@ -4,8 +4,7 @@
   "title": "Deepl Tools",
   "description": "Translate clipboard text with DeepL",
   "icon": "extension-icon.png",
-  "author": "artem",
-  "owner": "raycast",
+  "author": "nextster",
   "categories": [
     "Productivity"
   ],
