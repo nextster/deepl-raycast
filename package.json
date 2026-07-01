@@ -24,48 +24,20 @@
       "type": "textfield",
       "required": true,
       "default": "https://api-free.deepl.com/v2/translate"
-    },
-    {
-      "name": "copyResult",
-      "label": "Copy translated text to clipboard automatically",
-      "description": "When enabled, each successful translation is copied back to the clipboard",
-      "type": "checkbox",
-      "default": true,
-      "required": false
     }
   ],
   "commands": [
     {
       "name": "translate-clipboard",
       "title": "Translate Clipboard",
-      "description": "Translate clipboard text with DeepL and copy the result",
-      "mode": "view"
+      "description": "Translate clipboard text with DeepL",
+      "mode": "no-view"
     },
     {
       "name": "translate-text",
       "title": "Translate Text",
-      "description": "Translate entered text with DeepL and copy the result",
+      "description": "Show a long DeepL translation",
       "mode": "view",
-      "arguments": [
-        {
-          "name": "text",
-          "placeholder": "Text to translate",
-          "type": "text",
-          "required": true
-        }
-      ]
-    },
-    {
-      "name": "translate-query",
-      "title": "Translate with Deepl",
-      "subtitle": "Deepl Tools",
-      "description": "Translate selected text, typed text, or clipboard text with DeepL and copy the result",
-      "mode": "no-view",
-      "keywords": [
-        "deepl",
-        "translation",
-        "translate"
-      ],
       "arguments": [
         {
           "name": "text",
@@ -73,6 +45,18 @@
           "type": "text",
           "required": false
         }
+      ]
+    },
+    {
+      "name": "translate-with-deepl",
+      "title": "Translate with Deepl",
+      "subtitle": "Deepl Tools",
+      "description": "Translate selected text or clipboard text with DeepL",
+      "mode": "no-view",
+      "keywords": [
+        "deepl",
+        "translation",
+        "translate"
       ]
     }
   ],
