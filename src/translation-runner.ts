@@ -19,6 +19,7 @@ import path from "path";
 import { translate } from "./deepl";
 import { isCompactText, previewText } from "./translation-display";
 import { CompletedTranslation, createTranslationStorageKey } from "./translation-payload";
+import { AppPreferences } from "./preferences";
 
 type TranslateArguments = {
   text?: string;
@@ -40,12 +41,17 @@ async function getSourceText(props: TranslateProps) {
     // No selected text is expected when the command is launched from Raycast.
   }
 
+  const argumentText = getArgumentText(props);
+  if (argumentText) {
+    return argumentText;
+  }
+
   const clipboardText = (await Clipboard.readText())?.trim();
   if (clipboardText) {
     return clipboardText;
   }
 
-  return getArgumentText(props);
+  return "";
 }
 
 async function openTranslationView(translation: CompletedTranslation) {
@@ -72,8 +78,10 @@ async function showNativeToast(text: string) {
     });
 
     child.once("error", reject);
-    child.unref();
-    resolve();
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
   });
 }
 
@@ -87,7 +95,7 @@ async function showCompactTranslation(text: string) {
 }
 
 async function translateAndShow(sourceText: string) {
-  const preferences = getPreferenceValues<Preferences>();
+  const preferences = getPreferenceValues<AppPreferences>();
   const sourceIsCompact = isCompactText(sourceText);
 
   if (sourceIsCompact) {

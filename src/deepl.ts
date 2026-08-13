@@ -1,3 +1,6 @@
+import { chooseDirection, languageName, sourceLanguageCode } from "./languages";
+import { AppPreferences } from "./preferences";
+
 type DeepLResponse = {
   translations?: Array<{
     detected_source_language?: string;
@@ -12,21 +15,7 @@ type DeepLResponse = {
 type Direction = ReturnType<typeof chooseDirection>;
 
 const MAX_TEXT_CHUNK_LENGTH = 4_000;
-
-export function chooseDirection(text: string) {
-  const letterCount = [...text.matchAll(/\p{L}/gu)].length;
-  const russianCyrillicCount = [...text.matchAll(/[А-Яа-яЁё]/g)].length;
-
-  if (letterCount === 0) {
-    return { sourceLang: undefined, targetLang: "RU" as const, rule: "empty -> auto -> RU" };
-  }
-
-  if (russianCyrillicCount / letterCount >= 0.5) {
-    return { sourceLang: "RU", targetLang: "EN" as const, rule: ">=50% Russian Cyrillic letters -> RU -> EN" };
-  }
-
-  return { sourceLang: undefined, targetLang: "RU" as const, rule: "DeepL auto-detect -> RU" };
-}
+const DEEPL_API_URL = "https://api-free.deepl.com/v2/translate";
 
 function splitLongSegment(segment: string) {
   const chunks: string[] = [];
@@ -62,21 +51,26 @@ function splitTextForDeepL(text: string) {
     .filter((segment) => segment.length > 0);
 }
 
-async function translateChunk(text: string, preferences: Preferences, direction: Direction) {
+function apiErrorMessage(status: number, payload: DeepLResponse) {
+  if (status === 403) return "DeepL rejected the API key. Check it in the extension preferences";
+  if (status === 456) return "Your DeepL character quota has been reached";
+  if (status === 429) return "DeepL is receiving too many requests. Try again in a moment";
+  return payload.message || payload.error?.message || `DeepL API error ${status}`;
+}
+
+async function translateChunk(text: string, preferences: AppPreferences, direction: Direction) {
   const body = new URLSearchParams();
   body.set("text", text);
   body.set("target_lang", direction.targetLang);
-  if (direction.sourceLang) {
-    body.set("source_lang", direction.sourceLang);
-  }
 
-  const response = await fetch(preferences.apiUrl, {
+  const response = await fetch(DEEPL_API_URL, {
     method: "POST",
     headers: {
-      Authorization: `DeepL-Auth-Key ${preferences.apiKey}`,
+      Authorization: `DeepL-Auth-Key ${preferences.apiKey.trim()}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body,
+    signal: AbortSignal.timeout(20_000),
   });
   const responseText = await response.text();
   let payload: DeepLResponse;
@@ -88,7 +82,7 @@ async function translateChunk(text: string, preferences: Preferences, direction:
   }
 
   if (!response.ok) {
-    throw new Error(payload.message || payload.error?.message || `DeepL API error ${response.status}`);
+    throw new Error(apiErrorMessage(response.status, payload));
   }
 
   const translatedText = payload.translations?.[0]?.text;
@@ -98,30 +92,47 @@ async function translateChunk(text: string, preferences: Preferences, direction:
 
   return {
     translatedText,
-    sourceLang: payload.translations?.[0]?.detected_source_language || direction.sourceLang,
+    sourceLang: payload.translations?.[0]?.detected_source_language,
   };
 }
 
-export async function translate(text: string, preferences: Preferences) {
-  const direction = chooseDirection(text);
+export async function translate(text: string, preferences: AppPreferences) {
+  let direction = chooseDirection(text, preferences.primaryLanguage, preferences.secondaryLanguage);
   const chunks = splitTextForDeepL(text);
-  const translatedChunks: string[] = [];
-  let detectedSourceLang = direction.sourceLang;
 
-  for (const chunk of chunks) {
-    if (!chunk.trim()) {
-      translatedChunks.push(chunk);
-      continue;
+  async function translateChunks(activeDirection: Direction) {
+    const translatedChunks: string[] = [];
+    let detectedSourceLang: string | undefined;
+
+    for (const chunk of chunks) {
+      if (!chunk.trim()) {
+        translatedChunks.push(chunk);
+        continue;
+      }
+
+      const translatedChunk = await translateChunk(chunk, preferences, activeDirection);
+      translatedChunks.push(translatedChunk.translatedText);
+      detectedSourceLang ||= translatedChunk.sourceLang;
     }
 
-    const translatedChunk = await translateChunk(chunk, preferences, direction);
-    translatedChunks.push(translatedChunk.translatedText);
-    detectedSourceLang ||= translatedChunk.sourceLang;
+    return { translatedText: translatedChunks.join(""), sourceLang: detectedSourceLang };
+  }
+
+  let result = await translateChunks(direction);
+  const primarySource = sourceLanguageCode(preferences.primaryLanguage);
+
+  if (direction.isUncertain && sourceLanguageCode(result.sourceLang || "") === primarySource) {
+    direction = {
+      targetLang: preferences.secondaryLanguage,
+      rule: `DeepL detected ${languageName(primarySource)} → ${languageName(preferences.secondaryLanguage)}`,
+      isUncertain: false,
+    };
+    result = await translateChunks(direction);
   }
 
   return {
-    ...direction,
-    translatedText: translatedChunks.join(""),
-    sourceLang: detectedSourceLang,
+    targetLang: direction.targetLang,
+    rule: direction.rule,
+    ...result,
   };
 }

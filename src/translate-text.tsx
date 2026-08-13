@@ -1,6 +1,9 @@
-import { Action, ActionPanel, Detail, Icon, LaunchProps, LocalStorage } from "@raycast/api";
+import { Action, ActionPanel, Detail, Form, Icon, LaunchProps, LocalStorage, getPreferenceValues } from "@raycast/api";
 import { showFailureToast } from "@raycast/utils";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { translate } from "./deepl";
+import { languageName } from "./languages";
+import { AppPreferences } from "./preferences";
 import {
   CompletedTranslation,
   TranslationLaunchContext,
@@ -15,20 +18,16 @@ type TranslateTextProps = LaunchProps<{
 }>;
 
 type TranslationState =
-  | { status: "loading" }
-  | {
-      status: "success";
-      sourceText: string;
-      translatedText: string;
-      sourceLang?: string;
-      targetLang: "EN" | "RU";
-      rule: string;
-    }
-  | { status: "error"; message: string };
+  | { status: "idle"; draft: string }
+  | { status: "loading"; sourceText: string }
+  | ({ status: "success" } & CompletedTranslation)
+  | { status: "error"; message: string; sourceText: string };
 
-function markdownForState(state: TranslationState) {
+const preferences = getPreferenceValues<AppPreferences>();
+
+function markdownForState(state: Exclude<TranslationState, { status: "idle" }>) {
   if (state.status === "loading") {
-    return "Loading translation...";
+    return "# Translating\n\nSending your text securely to DeepL…";
   }
 
   if (state.status === "error") {
@@ -40,28 +39,47 @@ function markdownForState(state: TranslationState) {
 
 export default function Command(props: TranslateTextProps) {
   const completedTranslation = isCompletedTranslation(props.launchContext) ? props.launchContext : undefined;
-  const argumentText = (props.arguments as Partial<Arguments.TranslateText> | undefined)?.text || "";
+  const argumentText = (props.arguments as Partial<Arguments.TranslateText> | undefined)?.text?.trim() || "";
   const storageKey =
     getTranslationStorageKey(props.launchContext) || (isTranslationStorageKey(argumentText) ? argumentText : undefined);
   const [state, setState] = useState<TranslationState>(
-    completedTranslation ? { status: "success", ...completedTranslation } : { status: "loading" },
+    completedTranslation
+      ? { status: "success", ...completedTranslation }
+      : storageKey || argumentText
+        ? { status: "loading", sourceText: argumentText }
+        : { status: "idle", draft: "" },
   );
 
-  useEffect(() => {
-    if (completedTranslation) {
+  const performTranslation = useCallback(async (sourceText: string) => {
+    const trimmedText = sourceText.trim();
+    if (!trimmedText) {
+      setState({ status: "idle", draft: "" });
       return;
     }
+
+    setState({ status: "loading", sourceText: trimmedText });
+    try {
+      const result = await translate(trimmedText, preferences);
+      setState({ status: "success", sourceText: trimmedText, ...result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setState({ status: "error", message, sourceText: trimmedText });
+      await showFailureToast(error, { title: "Couldn't translate text" });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (completedTranslation) return;
 
     if (!storageKey) {
-      setState({ status: "error", message: "Stored translation was not found" });
+      if (argumentText) void performTranslation(argumentText);
       return;
     }
 
-    const translationStorageKey = storageKey;
     async function loadStoredTranslation() {
       try {
-        const serializedTranslation = await LocalStorage.getItem<string>(translationStorageKey);
-        await LocalStorage.removeItem(translationStorageKey);
+        const serializedTranslation = await LocalStorage.getItem<string>(storageKey as string);
+        await LocalStorage.removeItem(storageKey as string);
 
         if (!serializedTranslation) {
           throw new Error("Stored translation was not found");
@@ -71,19 +89,50 @@ export default function Command(props: TranslateTextProps) {
         setState({ status: "success", ...storedTranslation });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        setState({ status: "error", message });
+        setState({ status: "error", message, sourceText: "" });
         await showFailureToast(error, { title: "Couldn't open translation" });
       }
     }
 
-    loadStoredTranslation();
-  }, []);
+    void loadStoredTranslation();
+  }, [argumentText, completedTranslation, performTranslation, storageKey]);
+
+  if (state.status === "idle") {
+    return (
+      <Form
+        actions={
+          <ActionPanel>
+            <Action.SubmitForm
+              title="Translate"
+              icon={Icon.Stars}
+              onSubmit={(values: { text: string }) => performTranslation(values.text)}
+            />
+          </ActionPanel>
+        }
+      >
+        <Form.TextArea
+          id="text"
+          title="Text"
+          placeholder={`Type or paste text in ${languageName(preferences.primaryLanguage)} or ${languageName(preferences.secondaryLanguage)}`}
+          defaultValue={state.draft}
+          autoFocus
+        />
+        <Form.Description
+          title="Direction"
+          text={`${languageName(preferences.primaryLanguage)} ↔ ${languageName(preferences.secondaryLanguage)}`}
+        />
+      </Form>
+    );
+  }
 
   const metadata =
     state.status === "success" ? (
       <Detail.Metadata>
-        <Detail.Metadata.Label title="Direction" text={`${state.sourceLang || "AUTO"} -> ${state.targetLang}`} />
-        <Detail.Metadata.Label title="Rule" text={state.rule} />
+        <Detail.Metadata.Label
+          title="Direction"
+          text={`${languageName(state.sourceLang || "AUTO")} → ${languageName(state.targetLang)}`}
+        />
+        <Detail.Metadata.Label title="Routing" text={state.rule} />
         <Detail.Metadata.Label title="Characters" text={String(state.sourceText.length)} />
       </Detail.Metadata>
     ) : undefined;
@@ -99,7 +148,26 @@ export default function Command(props: TranslateTextProps) {
             <>
               <Action.CopyToClipboard title="Copy Translation" icon={Icon.Clipboard} content={state.translatedText} />
               <Action.Paste title="Paste Translation" content={state.translatedText} />
+              <Action
+                title="Translate Something Else"
+                icon={Icon.Pencil}
+                onAction={() => setState({ status: "idle", draft: "" })}
+              />
               <Action.CopyToClipboard title="Copy Source" content={state.sourceText} />
+            </>
+          ) : null}
+          {state.status === "error" ? (
+            <>
+              <Action
+                title="Try Again"
+                icon={Icon.RotateClockwise}
+                onAction={() => performTranslation(state.sourceText)}
+              />
+              <Action
+                title="Edit Text"
+                icon={Icon.Pencil}
+                onAction={() => setState({ status: "idle", draft: state.sourceText })}
+              />
             </>
           ) : null}
         </ActionPanel>
