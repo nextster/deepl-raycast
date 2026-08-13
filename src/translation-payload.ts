@@ -4,7 +4,7 @@ export type CompletedTranslation = {
   sourceText: string;
   translatedText: string;
   sourceLang?: string;
-  targetLang: "EN" | "RU";
+  targetLang: string;
   rule: string;
 };
 
