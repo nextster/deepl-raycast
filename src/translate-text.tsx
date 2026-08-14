@@ -1,9 +1,10 @@
-import { Action, ActionPanel, Detail, Form, Icon, LaunchProps, LocalStorage, getPreferenceValues } from "@raycast/api";
+import { Action, ActionPanel, Detail, Form, Icon, LaunchProps, LocalStorage } from "@raycast/api";
 import { showFailureToast } from "@raycast/utils";
 import { useCallback, useEffect, useState } from "react";
 import { translate } from "./deepl";
+import { LanguageSetup } from "./language-setup";
 import { languageName } from "./languages";
-import { AppPreferences } from "./preferences";
+import { AppPreferences, getConfiguredPreferences } from "./preferences";
 import {
   CompletedTranslation,
   TranslationLaunchContext,
@@ -23,8 +24,6 @@ type TranslationState =
   | ({ status: "success" } & CompletedTranslation)
   | { status: "error"; message: string; sourceText: string };
 
-const preferences = getPreferenceValues<AppPreferences>();
-
 function markdownForState(state: Exclude<TranslationState, { status: "idle" }>) {
   if (state.status === "loading") {
     return "# Translating\n\nSending your text securely to DeepL…";
@@ -37,7 +36,7 @@ function markdownForState(state: Exclude<TranslationState, { status: "idle" }>) 
   return [`# Translation`, state.translatedText, "", "## Source", state.sourceText].join("\n\n");
 }
 
-export default function Command(props: TranslateTextProps) {
+function TranslateTextCommand({ props, preferences }: { props: TranslateTextProps; preferences: AppPreferences }) {
   const completedTranslation = isCompletedTranslation(props.launchContext) ? props.launchContext : undefined;
   const argumentText = (props.arguments as Partial<Arguments.TranslateText> | undefined)?.text?.trim() || "";
   const storageKey =
@@ -174,4 +173,29 @@ export default function Command(props: TranslateTextProps) {
       }
     />
   );
+}
+
+export default function Command(props: TranslateTextProps) {
+  const [preferences, setPreferences] = useState<AppPreferences | null>();
+
+  useEffect(() => {
+    void getConfiguredPreferences().then((value) => setPreferences(value || null));
+  }, []);
+
+  if (preferences === undefined) {
+    return <Detail isLoading markdown="# Loading DeepL Tools…" />;
+  }
+
+  if (preferences === null) {
+    return (
+      <LanguageSetup
+        onSaved={async () => {
+          const configuredPreferences = await getConfiguredPreferences();
+          setPreferences(configuredPreferences || null);
+        }}
+      />
+    );
+  }
+
+  return <TranslateTextCommand props={props} preferences={preferences} />;
 }

@@ -45,6 +45,22 @@ test("retries toward the secondary language when DeepL detects short primary-lan
     requests.map((body) => body.get("target_lang")),
     ["RU", "EN-US"],
   );
+  assert.equal(requests[1].get("source_lang"), "RU");
+});
+
+test("constrains ambiguous short text to the configured language pair", async (context) => {
+  const requests: URLSearchParams[] = [];
+  context.mock.method(globalThis, "fetch", async (_input, init) => {
+    requests.push(init?.body as URLSearchParams);
+    return requests.length === 1 ? deepLResponse("DA", "однако") : deepLResponse("EN", "собака");
+  });
+
+  const result = await translate("dog", preferences);
+
+  assert.equal(result.translatedText, "собака");
+  assert.equal(result.targetLang, "RU");
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].get("source_lang"), "EN");
 });
 
 test("uses the API Free endpoint and sends the key in the authorization header", async (context) => {

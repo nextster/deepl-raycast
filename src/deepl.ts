@@ -58,10 +58,18 @@ function apiErrorMessage(status: number, payload: DeepLResponse) {
   return payload.message || payload.error?.message || `DeepL API error ${status}`;
 }
 
-async function translateChunk(text: string, preferences: AppPreferences, direction: Direction) {
+async function translateChunk(
+  text: string,
+  preferences: AppPreferences,
+  direction: Direction,
+  sourceLanguage?: string,
+) {
   const body = new URLSearchParams();
   body.set("text", text);
   body.set("target_lang", direction.targetLang);
+  if (sourceLanguage) {
+    body.set("source_lang", sourceLanguage);
+  }
 
   const response = await fetch(DEEPL_API_URL, {
     method: "POST",
@@ -100,7 +108,7 @@ export async function translate(text: string, preferences: AppPreferences) {
   let direction = chooseDirection(text, preferences.primaryLanguage, preferences.secondaryLanguage);
   const chunks = splitTextForDeepL(text);
 
-  async function translateChunks(activeDirection: Direction) {
+  async function translateChunks(activeDirection: Direction, sourceLanguage?: string) {
     const translatedChunks: string[] = [];
     let detectedSourceLang: string | undefined;
 
@@ -110,7 +118,7 @@ export async function translate(text: string, preferences: AppPreferences) {
         continue;
       }
 
-      const translatedChunk = await translateChunk(chunk, preferences, activeDirection);
+      const translatedChunk = await translateChunk(chunk, preferences, activeDirection, sourceLanguage);
       translatedChunks.push(translatedChunk.translatedText);
       detectedSourceLang ||= translatedChunk.sourceLang;
     }
@@ -120,14 +128,23 @@ export async function translate(text: string, preferences: AppPreferences) {
 
   let result = await translateChunks(direction);
   const primarySource = sourceLanguageCode(preferences.primaryLanguage);
+  const secondarySource = sourceLanguageCode(preferences.secondaryLanguage);
+  const detectedSource = sourceLanguageCode(result.sourceLang || "");
 
-  if (direction.isUncertain && sourceLanguageCode(result.sourceLang || "") === primarySource) {
+  if (direction.isUncertain && detectedSource === primarySource) {
     direction = {
       targetLang: preferences.secondaryLanguage,
       rule: `DeepL detected ${languageName(primarySource)} → ${languageName(preferences.secondaryLanguage)}`,
       isUncertain: false,
     };
-    result = await translateChunks(direction);
+    result = await translateChunks(direction, primarySource);
+  } else if (direction.isUncertain && detectedSource !== secondarySource) {
+    direction = {
+      ...direction,
+      rule: `Short text treated as ${languageName(secondarySource)} → ${languageName(preferences.primaryLanguage)}`,
+      isUncertain: false,
+    };
+    result = await translateChunks(direction, secondarySource);
   }
 
   return {
