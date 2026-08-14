@@ -2,6 +2,8 @@ import { Action, ActionPanel, Form, Icon, Toast, showToast } from "@raycast/api"
 import { languageName, sourceLanguageCode, TARGET_LANGUAGE_CODES } from "./languages";
 import { LanguagePreferences, saveLanguagePreferences } from "./preferences";
 
+const GET_API_KEY_TITLE = "Get DeepL API Key";
+
 type LanguageSetupProps = {
   initialPreferences?: LanguagePreferences;
   onSaved: (preferences: LanguagePreferences) => void | Promise<void>;
@@ -29,7 +31,7 @@ export function LanguageSetup({ initialPreferences, onSaved }: LanguageSetupProp
         <ActionPanel>
           <Action.SubmitForm title="Save Languages" icon={Icon.Checkmark} onSubmit={handleSubmit} />
           <Action.OpenInBrowser
-            title="Get a Free DeepL API Key"
+            title={GET_API_KEY_TITLE}
             icon={Icon.Link}
             url="https://www.deepl.com/your-account/keys"
           />
