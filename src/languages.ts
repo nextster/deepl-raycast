@@ -78,6 +78,45 @@ export const LANGUAGE_NAMES: Record<string, string> = {
   "ZH-HANT": "Chinese (Traditional)",
 };
 
+export const TARGET_LANGUAGE_CODES = [
+  "AR",
+  "BG",
+  "ZH-HANS",
+  "ZH-HANT",
+  "CS",
+  "DA",
+  "NL",
+  "EN-US",
+  "EN-GB",
+  "ET",
+  "FI",
+  "FR",
+  "DE",
+  "EL",
+  "HE",
+  "HU",
+  "ID",
+  "IT",
+  "JA",
+  "KO",
+  "LV",
+  "LT",
+  "NB",
+  "PL",
+  "PT-BR",
+  "PT-PT",
+  "RO",
+  "RU",
+  "SK",
+  "SL",
+  "ES",
+  "SV",
+  "TH",
+  "TR",
+  "UK",
+  "VI",
+] as const;
+
 export function sourceLanguageCode(language: string) {
   return language.split("-")[0];
 }
@@ -113,7 +152,7 @@ function detectConfiguredLanguage(text: string, primaryLanguage: string, seconda
 
 export function chooseDirection(text: string, primaryLanguage: string, secondaryLanguage: string) {
   if (!LANGUAGE_NAMES[primaryLanguage] || !LANGUAGE_NAMES[secondaryLanguage]) {
-    throw new Error("Choose supported primary and secondary languages in the extension preferences");
+    throw new Error("Run Configure Languages and choose a supported language pair");
   }
 
   if (sourceLanguageCode(primaryLanguage) === sourceLanguageCode(secondaryLanguage)) {

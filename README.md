@@ -12,11 +12,10 @@ Short translations appear as a compact notification. Longer translations open in
 
 ## Setup
 
-The first time you run a command, Raycast asks for:
+The first time you run a command:
 
-1. Your DeepL API key.
-2. Your primary language.
-3. Your secondary language.
+1. Raycast securely asks for your DeepL API key.
+2. DeepL Tools asks for your primary and secondary languages.
 
 To get the key:
 
@@ -27,7 +26,7 @@ To get the key:
 
 The extension itself is free; DeepL API Free includes a monthly character allowance subject to DeepL's current limits. DeepL also documents authentication in its [API quick start](https://developers.deepl.com/docs/getting-started/auth).
 
-The extension uses the DeepL API Free endpoint. You can change your languages later in Raycast's extension preferences.
+The extension uses the DeepL API Free endpoint. Run **Configure Languages** whenever you want to change your pair; change the API key in Raycast's extension preferences.
 
 ## Share with friends
 
@@ -44,7 +43,7 @@ Raycast opens the local extension and shows the first-run setup. Each person use
 
 ## Smart direction
 
-The extension detects which of your configured languages the text resembles. Primary-language text goes to the secondary language; secondary-language text goes to the primary language. For very short or ambiguous phrases, it lets DeepL verify the direction and retries only when needed.
+The extension detects which of your configured languages the text resembles. Primary-language text goes to the secondary language; secondary-language text goes to the primary language. Very short or ambiguous phrases are constrained to your configured pair, avoiding unrelated-language guesses such as reading the English word “dog” as Danish.
 
 ## Development
 

@@ -6,7 +6,6 @@ import {
   LocalStorage,
   Toast,
   closeMainWindow,
-  getPreferenceValues,
   getSelectedText,
   launchCommand,
   showHUD,
@@ -19,7 +18,7 @@ import path from "path";
 import { translate } from "./deepl";
 import { isCompactText, previewText } from "./translation-display";
 import { CompletedTranslation, createTranslationStorageKey } from "./translation-payload";
-import { AppPreferences } from "./preferences";
+import { getConfiguredPreferences } from "./preferences";
 
 type TranslateArguments = {
   text?: string;
@@ -95,7 +94,11 @@ async function showCompactTranslation(text: string) {
 }
 
 async function translateAndShow(sourceText: string) {
-  const preferences = getPreferenceValues<AppPreferences>();
+  const preferences = await getConfiguredPreferences();
+  if (!preferences) {
+    await launchCommand({ name: "configure-languages", type: LaunchType.UserInitiated });
+    return;
+  }
   const sourceIsCompact = isCompactText(sourceText);
 
   if (sourceIsCompact) {
